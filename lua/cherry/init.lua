@@ -28,7 +28,6 @@ vim.g.cherry_pairs = {
 }
 
 M.setup = function()
-	vim.cmd("redir >> debug")
 	vim.t.current_cherry_pairs = vim.g.cherry_pairs["default"]
 	if vim.g.cherry_pairs[vim.bo.filetype] == nil then
 		return
@@ -81,7 +80,10 @@ local function clear_matches(range)
 end
 
 function M.update_pairs()
-	print(123)
+	if vim.treesitter.language.get_lang(vim.bo.filetype) == nil then
+		return
+	end
+
 	clear_matches()
 	vim.t.cherry_results = {}
 	local start_line = vim.api.nvim_call_function("line", { "w0" })
@@ -103,7 +105,6 @@ function M.update_pairs()
 		})
 	end
 	highlight()
-	vim.cmd("redir END")
 end
 
 function M.cherry_validate_ts(start_pos_1, end_pos_1, bufnr)
