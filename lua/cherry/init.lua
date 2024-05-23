@@ -27,15 +27,31 @@ vim.g.cherry_pairs = {
 	},
 }
 
-local function setup()
-	for i, list in ipairs(vim.g.cherry_highlights) do
+
+function M.setup(config)
+	local highlights = {
+		{ guibg = "red", guifg = "black", gui = "bold" },
+		{ guibg = "orange", guifg = "black", gui = "bold" },
+		{ guibg = "yellow", guifg = "black", gui = "bold" },
+		{ guibg = "green", guifg = "black", gui = "bold" },
+		{ guibg = "cyan", guifg = "black", gui = "bold" },
+		{ guibg = "blue", guifg = "black", gui = "bold" },
+		{ guibg = "magenta", guifg = "black", gui = "bold" },
+		{ guibg = "white", guifg = "black", gui = "bold" },
+	}
+	if config ~= nil and config.highlights ~= nil then
+		highlights = config.highlights
+	end
+	for i, list in ipairs(highlights) do
 		local hi_cmd = "highlight Cherry-" .. i
 		for key, val in pairs(list) do
 			hi_cmd = hi_cmd .. " " .. key .. "=" .. val
 		end
 		vim.cmd(hi_cmd)
 	end
+end
 
+local function init_buffer()
 	vim.t.current_cherry_pairs = vim.g.cherry_pairs["default"]
 	if vim.g.cherry_pairs[vim.bo.filetype] == nil then
 		return
@@ -89,10 +105,10 @@ function M.update_pairs()
 		return
 	end
 
-	if vim.t.cherry_setup == nil then
-		setup()
+	if vim.t.cherry_buffer_init == nil then
+		init_buffer()
 		vim.t.highlights = {}
-		vim.t.cherry_setup = 1
+		vim.t.cherry_buffer_init = 1
 	end
 
 	clear_matches()
