@@ -27,27 +27,32 @@ vim.g.cherry_pairs = {
 	},
 }
 
-
 function M.setup(config)
-	local highlights = {
-		{ guibg = "red", guifg = "black", gui = "bold" },
-		{ guibg = "orange", guifg = "black", gui = "bold" },
-		{ guibg = "yellow", guifg = "black", gui = "bold" },
-		{ guibg = "green", guifg = "black", gui = "bold" },
-		{ guibg = "cyan", guifg = "black", gui = "bold" },
-		{ guibg = "blue", guifg = "black", gui = "bold" },
-		{ guibg = "magenta", guifg = "black", gui = "bold" },
-		{ guibg = "white", guifg = "black", gui = "bold" },
-	}
-	if config ~= nil and config.highlights ~= nil then
+	local highlights = {}
+	if config == nil or config.highlights == nil then
+		highlights = {
+			{ guibg = "red", guifg = "black", gui = "bold" },
+			{ guibg = "orange", guifg = "black", gui = "bold" },
+			{ guibg = "yellow", guifg = "black", gui = "bold" },
+			{ guibg = "green", guifg = "black", gui = "bold" },
+			{ guibg = "cyan", guifg = "black", gui = "bold" },
+			{ guibg = "blue", guifg = "black", gui = "bold" },
+			{ guibg = "magenta", guifg = "black", gui = "bold" },
+			{ guibg = "white", guifg = "black", gui = "bold" },
+		}
+	else
 		highlights = config.highlights
 	end
+
 	for i, list in ipairs(highlights) do
-		local hi_cmd = "highlight Cherry-" .. i
+		local hi_cmd = "highlight Cherry" .. i
+		local hi_cmd_flashing = "highlight CherryFlashing" .. i
+		local hi_params = ""
 		for key, val in pairs(list) do
-			hi_cmd = hi_cmd .. " " .. key .. "=" .. val
+			hi_params = " " .. hi_params .. " " .. key .. "=" .. val
 		end
-		vim.cmd(hi_cmd)
+		vim.cmd(hi_cmd .. hi_params)
+		vim.cmd(hi_cmd_flashing .. hi_params)
 	end
 end
 
@@ -72,13 +77,13 @@ local function highlight()
 		return
 	end
 	for i, result in pairs(vim.t.cherry_results) do
-		local match_id = vim.fn.matchaddpos("Cherry-" .. i, result)
+		local match_id = vim.fn.matchaddpos("Cherry" .. i, result)
 		temp_table[tostring(match_id)] = result
 	end
+	vim.cmd("set guicursor")
 	vim.t.highlights = temp_table
 end
 
--- @param[range] range of lines to be cleared {1, 3}
 local function clear_matches(range)
 	if vim.t.highlights == nil then
 		return
