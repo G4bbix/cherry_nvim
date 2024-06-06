@@ -1,68 +1,105 @@
 local M = {}
 
-vim.g.cherry_pairs = {
-	default = {
-		{ "{", "}" },
-		{ "[", "]" },
-		{ "(", ")" },
+local default_config = {
+	languages = {
+		default = {
+			pairs = {
+				{ "{", "}" },
+				{ "[", "]" },
+				{ "(", ")" },
+			},
+		},
+		vim = {
+			pairs = {
+				{ "if", "endif" },
+				{ "function", "endfunction" },
+				{ "while", "endwhile" },
+				{ "for", "endfor" },
+				{ "try", "endtry" },
+			},
+		},
+		sh = {
+			pairs = {
+				{ "if", "fi" },
+				{ "for", "done" },
+				{ "while", "done" },
+				{ "case", "esac" },
+			},
+			allowed_doubles = {
+				{ "(" },
+				{ "[" },
+			},
+		},
+		lua = {
+			pairs = {
+				{ "function", "end" },
+				{ "if", "end" },
+				{ "do", "end" },
+				{ "repeat", "until" },
+			},
+		},
+		["yaml.ansible"] = {
+			allowed_doubles = {
+				{ "{" },
+			},
+		},
 	},
-	vim = {
-		{ "if", "endif" },
-		{ "function", "endfunction" },
-		{ "while", "endwhile" },
-		{ "for", "endfor" },
-		{ "try", "endtry" },
-	},
-	sh = {
-		{ "if", "fi" },
-		{ "for", "done" },
-		{ "while", "done" },
-		{ "case", "esac" },
-	},
-	lua = {
-		{ "function", "end" },
-		{ "if", "end" },
-		{ "do", "end" },
-		{ "repeat", "until" },
+	highlights = {
+		{ guibg = "red", guifg = "black", gui = "bold" },
+		{ guibg = "orange", guifg = "black", gui = "bold" },
+		{ guibg = "yellow", guifg = "black", gui = "bold" },
+		{ guibg = "green", guifg = "black", gui = "bold" },
+		{ guibg = "cyan", guifg = "black", gui = "bold" },
+		{ guibg = "blue", guifg = "black", gui = "bold" },
+		{ guibg = "magenta", guifg = "black", gui = "bold" },
+		{ guibg = "white", guifg = "black", gui = "bold" },
 	},
 }
 
-function M.setup(config)
-	local highlights = {}
-	if config == nil or config.highlights == nil then
-		highlights = {
-			{ guibg = "red", guifg = "black", gui = "bold" },
-			{ guibg = "orange", guifg = "black", gui = "bold" },
-			{ guibg = "yellow", guifg = "black", gui = "bold" },
-			{ guibg = "green", guifg = "black", gui = "bold" },
-			{ guibg = "cyan", guifg = "black", gui = "bold" },
-			{ guibg = "blue", guifg = "black", gui = "bold" },
-			{ guibg = "magenta", guifg = "black", gui = "bold" },
-			{ guibg = "white", guifg = "black", gui = "bold" },
-		}
+local config = {}
+config.languages = default_config.languages
+
+function M.setup(override_config)
+	if override_config.highlights ~= nil then
+		config.highlights = override_config.highlights
 	else
-		highlights = config.highlights
+		config.highlights = default_config.highlights
+	end
+	if override_config.languages ~= nil then
+		for lang in pairs(override_config.languages) do
+			if override_config.languages[lang].pairs ~= nil then
+				for _, pair in pairs(override_config.languages[lang].pairs) do
+					local unique_pair = true
+					for _, default_pair in pairs(default_config.languages[lang].pairs) do
+						if pair[1] == default_pair[1] then
+							unique_pair = false
+							break
+						end
+					end
+					if unique_pair then
+						table.insert(config.languages[lang].pairs, { pair[1], pair[2] })
+					end
+				end
+			end
+		end
 	end
 
-	for i, list in ipairs(highlights) do
+	for i, list in ipairs(config.highlights) do
 		local hi_cmd = "highlight Cherry" .. i
-		local hi_cmd_flashing = "highlight CherryFlashing" .. i
-		local hi_params = ""
 		for key, val in pairs(list) do
-			hi_params = " " .. hi_params .. " " .. key .. "=" .. val
+			hi_cmd = " " .. hi_cmd .. " " .. key .. "=" .. val
 		end
-		vim.cmd(hi_cmd .. hi_params)
-		vim.cmd(hi_cmd_flashing .. hi_params)
+		vim.cmd(hi_cmd)
 	end
 end
 
 local function init_buffer()
-	vim.t.current_cherry_pairs = vim.g.cherry_pairs["default"]
-	if vim.g.cherry_pairs[vim.bo.filetype] == nil then
+	vim.t.current_cherry_pairs = config.languages["default"].pairs
+	if config.languages[vim.bo.filetype] == nil or config.languages[vim.bo.filetype].pairs == nil then
 		return
 	end
 	local temp_table = vim.t.current_cherry_pairs
-	for _, pair in pairs(vim.g.cherry_pairs[vim.bo.filetype]) do
+	for _, pair in pairs(config.languages[vim.bo.filetype].pairs) do
 		if temp_table[pair[1]] ~= nil then
 			error("CHERRY ERROR: Opening word " .. pair[1] .. " already exists")
 		end
@@ -80,7 +117,7 @@ local function highlight()
 		local match_id = vim.fn.matchaddpos("Cherry" .. i, result)
 		temp_table[tostring(match_id)] = result
 	end
-	vim.cmd("set guicursor")
+	vim.cmd("silent set guicursor")
 	vim.t.highlights = temp_table
 end
 
@@ -136,8 +173,20 @@ function M.update_pairs()
 			30,
 		})
 	end
+	-- if vim.t.cherry_pairs[vim.bo.filetype].allowed_doubles ~= nil then
+
+	-- end
+
 	highlight()
 end
+
+-- local function check_doubles()
+
+-- 	local temp_table = vim.t.cherry_results
+-- 	for i, result in pairs(vim.t.cherry_results) do
+-- 		print(vim.inspect(result))
+-- 	end
+-- end
 
 function M.cherry_validate_ts(start_pos_1, end_pos_1, bufnr)
 	local start_pos = { start_pos_1[1] - 1, start_pos_1[2] - 1 }
