@@ -142,6 +142,42 @@ local function clear_matches(range)
 	vim.t.highlights = temp_table
 end
 
+local function check_doubles()
+	local temp_table = {}
+	local i = 1
+	local bufnr = vim.fn.bufnr("%")
+	while i <= #vim.t.cherry_results do
+		if i == #vim.t.cherry_results then
+			table.insert(temp_table, vim.t.cherry_results[i])
+			break
+		end
+		local cur_pair = vim.t.cherry_results[i]
+		local next_pair = vim.t.cherry_results[i + 1]
+		local start_node_1 = vim.treesitter.get_node({ bufnr, pos = { cur_pair[1][1] - 1, cur_pair[1][2] - 1 } })
+		local end_node_1 = vim.treesitter.get_node({ bufnr, pos = { cur_pair[2][1] - 1, cur_pair[2][2] - 1 } })
+		local start_node_2 = vim.treesitter.get_node({ bufnr, pos = { next_pair[1][1] - 1, next_pair[1][2] - 1 } })
+		local end_node_2 = vim.treesitter.get_node({ bufnr, pos = { next_pair[2][1] - 1, next_pair[2][2] - 1 } })
+
+		if start_node_1 == nil or end_node_1 == nil or start_node_2 == nil or end_node_2 == nil then
+			print("WARNING Cherry could not find treesitter node")
+			table.insert(temp_table, vim.t.cherry_results[i])
+			i = i + 1
+		else
+			if start_node_1:id() == end_node_2:id() and start_node_2:id() == start_node_1:id() then
+				local temp_el = { vim.t.cherry_results[i][1], vim.t.cherry_results[i + 1][2] }
+				temp_el[1][3] = vim.t.cherry_results[i][1][3] + vim.t.cherry_results[i + 1][1][3]
+				temp_el[2][3] = vim.t.cherry_results[i][2][3] + vim.t.cherry_results[i + 1][2][3]
+				table.insert(temp_table, temp_el)
+				i = i + 2
+			else
+				table.insert(temp_table, vim.t.cherry_results[i])
+				i = i + 1
+			end
+		end
+	end
+	vim.t.cherry_results = temp_table
+end
+
 function M.update_pairs()
 	if vim.treesitter.language.get_lang(vim.bo.filetype) == nil then
 		return
@@ -173,26 +209,28 @@ function M.update_pairs()
 			30,
 		})
 	end
-	-- if vim.t.cherry_pairs[vim.bo.filetype].allowed_doubles ~= nil then
-
-	-- end
+	if config.languages[vim.bo.filetype] ~= nil and config.languages[vim.bo.filetype].allowed_doubles ~= nil then
+		check_doubles()
+	end
 
 	highlight()
 end
 
--- local function check_doubles()
-
--- 	local temp_table = vim.t.cherry_results
--- 	for i, result in pairs(vim.t.cherry_results) do
--- 		print(vim.inspect(result))
--- 	end
--- end
-
+vim.cmd("redir >> debug")
 function M.cherry_validate_ts(start_pos_1, end_pos_1, bufnr)
 	local start_pos = { start_pos_1[1] - 1, start_pos_1[2] - 1 }
 	local end_pos = { end_pos_1[1] - 1, end_pos_1[2] - 1 }
 	local start_node = vim.treesitter.get_node({ bufnr, pos = { start_pos[1], start_pos[2] } })
 	local end_node = vim.treesitter.get_node({ bufnr, pos = { end_pos[1], end_pos[2] } })
+	if start_node == nil or end_node == nil then
+		return 1
+	end
+	if start_node:type() == "while_statement" then
+		end_node = end_node:parent()
+		if end_node == nil then
+			return 1
+		end
+	end
 	if start_node:id() == end_node:id() then
 		return 0
 	else
@@ -205,15 +243,15 @@ function M.cherry_aggregate_results(open, close, len_open, len_close)
 	local temp_table = vim.t.cherry_results
 	local target_index = 1
 
-	if table.getn(temp_table) ~= 0 then
-		for i = 1, table.getn(temp_table), 1 do
+	if #temp_table ~= 0 then
+		for i = 1, #temp_table, 1 do
 			if
 				tonumber(temp_table[i][1][1]) > open[1]
 				or (tonumber(temp_table[i][1][1]) == open[1] and tonumber(temp_table[i][1][2]) > open[2])
 			then
 				target_index = i
 				break
-			elseif i == table.getn(temp_table) then
+			elseif i == #temp_table then
 				target_index = i + 1
 				break
 			end
