@@ -56,6 +56,8 @@ local default_config = {
 	},
 }
 
+local winnr
+
 local config = {}
 config.languages = default_config.languages
 
@@ -109,25 +111,26 @@ local function init_buffer()
 end
 
 local function highlight()
-	local temp_table = vim.t.highlights
-	if temp_table == nil then
+	local temp_table = {}
+	temp_table[winnr] = {}
+	if vim.t.cherry_results[winnr] == nil then
 		return
 	end
-	for i, result in pairs(vim.t.cherry_results) do
+	for i, result in pairs(vim.t.cherry_results[winnr]) do
 		local match_id = vim.fn.matchaddpos("Cherry" .. i, result)
-		temp_table[tostring(match_id)] = result
+		temp_table[winnr][tostring(match_id)] = result
 	end
 	vim.cmd("silent set guicursor")
 	vim.t.highlights = temp_table
 end
 
 local function clear_matches(range)
-	if vim.t.highlights == nil then
+	if vim.t.highlights[winnr] == nil then
 		return
 	end
 
 	local temp_table = vim.t.highlights
-	for id, val in pairs(vim.t.highlights) do
+	for id, val in pairs(vim.t.highlights[winnr]) do
 		local delete_match = true
 		if range ~= nil then
 			if val[1] < range[1] and val[2] > range[2] then
@@ -135,7 +138,7 @@ local function clear_matches(range)
 			end
 		end
 		if delete_match then
-			temp_table[id] = nil
+			temp_table[winnr][id] = nil
 			vim.fn.matchdelete(tonumber(id))
 		end
 	end
@@ -143,16 +146,20 @@ local function clear_matches(range)
 end
 
 local function check_doubles()
-	local temp_table = {}
+	if vim.t.cherry_results[winnr] == nil or #vim.t.cherry_results[winnr] == 1 then
+		return
+	end
+
+	local temp_table = { [winnr] = {}}
 	local i = 1
 	local bufnr = vim.fn.bufnr("%")
-	while i <= #vim.t.cherry_results do
-		if i == #vim.t.cherry_results then
-			table.insert(temp_table, vim.t.cherry_results[i])
+	while i <= #vim.t.cherry_results[winnr] do
+		if i == #vim.t.cherry_results[winnr] then
+			table.insert(temp_table[winnr], vim.t.cherry_results[winnr][i])
 			break
 		end
-		local cur_pair = vim.t.cherry_results[i]
-		local next_pair = vim.t.cherry_results[i + 1]
+		local cur_pair = vim.t.cherry_results[winnr][i]
+		local next_pair = vim.t.cherry_results[winnr][i + 1]
 		local start_node_1 = vim.treesitter.get_node({ bufnr, pos = { cur_pair[1][1] - 1, cur_pair[1][2] - 1 } })
 		local end_node_1 = vim.treesitter.get_node({ bufnr, pos = { cur_pair[2][1] - 1, cur_pair[2][2] - 1 } })
 		local start_node_2 = vim.treesitter.get_node({ bufnr, pos = { next_pair[1][1] - 1, next_pair[1][2] - 1 } })
@@ -160,32 +167,34 @@ local function check_doubles()
 
 		if start_node_1 == nil or end_node_1 == nil or start_node_2 == nil or end_node_2 == nil then
 			print("WARNING Cherry could not find treesitter node")
-			table.insert(temp_table, vim.t.cherry_results[i])
+			table.insert(temp_table[winnr], vim.t.cherry_results[winnr][i])
 			i = i + 1
 		else
 			if start_node_1:id() == end_node_2:id() and start_node_2:id() == start_node_1:id() then
-				local temp_el = { vim.t.cherry_results[i][1], vim.t.cherry_results[i + 1][2] }
-				temp_el[1][3] = vim.t.cherry_results[i][1][3] + vim.t.cherry_results[i + 1][1][3]
-				temp_el[2][3] = vim.t.cherry_results[i][2][3] + vim.t.cherry_results[i + 1][2][3]
-				table.insert(temp_table, temp_el)
+				local temp_el = { vim.t.cherry_results[winnr][i][1], vim.t.cherry_results[winnr][i + 1][2] }
+				temp_el[1][3] = vim.t.cherry_results[winnr][i][1][3] + vim.t.cherry_results[winnr][i + 1][1][3]
+				temp_el[2][3] = vim.t.cherry_results[winnr][i][2][3] + vim.t.cherry_results[winnr][i + 1][2][3]
+				table.insert(temp_table[winnr], temp_el)
 				i = i + 2
 			else
-				table.insert(temp_table, vim.t.cherry_results[i])
+				table.insert(temp_table[winnr], vim.t.cherry_results[winnr][i])
 				i = i + 1
 			end
 		end
 	end
-	vim.t.cherry_results = temp_table
+	vim.t.cherry_results= temp_table
 end
 
 function M.update_pairs()
 	if vim.treesitter.language.get_lang(vim.bo.filetype) == nil then
 		return
 	end
+	winnr = tostring(vim.call("winnr"))
 
 	if vim.t.cherry_buffer_init == nil then
 		init_buffer()
 		vim.t.highlights = {}
+		vim.t.highlights[winnr] = {}
 		vim.t.cherry_buffer_init = 1
 	end
 
@@ -195,7 +204,6 @@ function M.update_pairs()
 	local last_line = vim.api.nvim_call_function("line", { "w$" })
 	vim.g.cherry_current_pos = vim.api.nvim_win_get_cursor(0)
 
-	vim.g.cherry_results = {}
 	for _, pair in pairs(vim.t.current_cherry_pairs) do
 		local open = pair[1]
 		local close = pair[2]
@@ -216,7 +224,6 @@ function M.update_pairs()
 	highlight()
 end
 
-vim.cmd("redir >> debug")
 function M.cherry_validate_ts(start_pos_1, end_pos_1, bufnr)
 	local start_pos = { start_pos_1[1] - 1, start_pos_1[2] - 1 }
 	local end_pos = { end_pos_1[1] - 1, end_pos_1[2] - 1 }
@@ -241,26 +248,35 @@ end
 function M.cherry_aggregate_results(open, close, len_open, len_close)
 	local open_str = { tostring(open[1]), tostring(open[2]) }
 	local temp_table = vim.t.cherry_results
-	local target_index = 1
 
-	if #temp_table ~= 0 then
-		for i = 1, #temp_table, 1 do
-			if
-				tonumber(temp_table[i][1][1]) > open[1]
-				or (tonumber(temp_table[i][1][1]) == open[1] and tonumber(temp_table[i][1][2]) > open[2])
-			then
-				target_index = i
-				break
-			elseif i == #temp_table then
-				target_index = i + 1
-				break
+	if temp_table[winnr] == nil then
+		temp_table[winnr] =
+			{ {
+				{ tonumber(open_str[1]), tonumber(open_str[2]), len_open },
+				{ close[1], close[2], len_close },
+			} }
+	else
+		local target_index = 1
+
+		if #temp_table[winnr] ~= 0 then
+			for i = 1, #temp_table, 1 do
+				if
+					tonumber(temp_table[i][1][1]) > open[1]
+					or (tonumber(temp_table[i][1][1]) == open[1] and tonumber(temp_table[i][1][2]) > open[2])
+				then
+					target_index = i
+					break
+				elseif i == #temp_table then
+					target_index = i + 1
+					break
+				end
 			end
 		end
+		table.insert(temp_table[winnr], target_index, {
+			{ tonumber(open_str[1]), tonumber(open_str[2]), len_open },
+			{ close[1], close[2], len_close },
+		})
 	end
-	table.insert(temp_table, target_index, {
-		{ tonumber(open_str[1]), tonumber(open_str[2]), len_open },
-		{ close[1], close[2], len_close },
-	})
 	vim.t.cherry_results = temp_table
 end
 
